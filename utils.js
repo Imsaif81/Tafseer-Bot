@@ -157,57 +157,92 @@ function nowIso() {
 }
 
 function formatDuaMessage(dua) {
-  return [
-    "🌿 <b>Qur'an Tafseer Course - Daily Reminder</b>",
-    "",
-    `🌙 ${escapeHtml(dua.category || "General")} Dua`,
-    "",
-    escapeHtml(dua.arabic || "N/A"),
-    "",
-    "English:",
-    escapeHtml(dua.english || "N/A"),
-    "",
-    "Urdu:",
-    escapeHtml(dua.urdu || "N/A"),
-    "",
-    `📚 Source: ${escapeHtml(dua.source || "N/A")}`,
-    `Authenticity: ${escapeHtml(dua.authenticity || "N/A")}`
+  const separator = "━━━━━━━━━━━━━━━━━━";
+  const clip = (value, max) => {
+    const text = escapeHtml(value || "N/A");
+    return text.length > max ? `${text.slice(0, max - 3)}...` : text;
+  };
+
+  const message = [
+    "🌿 <b>Tafseer Bot</b>",
+    separator,
+    "🕊 <b>Daily Dua Reminder</b>",
+    separator,
+    `🌙 <b>Category:</b> ${clip(dua.category || "General", 80)} Dua`,
+    separator,
+    "🕋 <b>Arabic</b>",
+    clip(dua.arabic, 900),
+    separator,
+    "🇬🇧 <b>English</b>",
+    clip(dua.english, 900),
+    separator,
+    "🇵🇰 <b>Urdu</b>",
+    clip(dua.urdu, 900),
+    separator,
+    `📚 <b>Source:</b> ${clip(dua.source, 220)}`,
+    `✅ <b>Authenticity:</b> ${clip(dua.authenticity, 120)}`
   ].join("\n");
+
+  return message.length <= 4096 ? message : `${message.slice(0, 4093)}...`;
 }
 
 function formatHadithMessage(hadith) {
-  return [
-    "🌿 <b>Qur'an Tafseer Course - Night Reminder</b>",
-    "",
-    "📖 Hadith of the Day",
-    "",
-    escapeHtml(hadith.arabic || "N/A"),
-    "",
-    "English:",
-    escapeHtml(hadith.english || "N/A"),
-    "",
-    "Urdu:",
-    escapeHtml(hadith.urdu || "N/A"),
-    "",
-    `📚 Source: ${escapeHtml(hadith.source || "N/A")}`,
-    "Authenticity: Sahih"
+  const separator = "━━━━━━━━━━━━━━━━━━";
+  const clip = (value, max) => {
+    const text = escapeHtml(value || "N/A");
+    return text.length > max ? `${text.slice(0, max - 3)}...` : text;
+  };
+
+  const message = [
+    "🌿 <b>Tafseer Bot</b>",
+    separator,
+    "📜 <b>Nightly Sahih Hadith</b>",
+    separator,
+    "📖 <b>Hadith of the Day</b>",
+    separator,
+    "🕋 <b>Arabic</b>",
+    clip(hadith.arabic, 900),
+    separator,
+    "🇬🇧 <b>English</b>",
+    clip(hadith.english, 900),
+    separator,
+    "🇵🇰 <b>Urdu</b>",
+    clip(hadith.urdu, 900),
+    separator,
+    `📚 <b>Source:</b> ${clip(hadith.source, 220)}`,
+    "✅ <b>Authenticity:</b> Sahih"
   ].join("\n");
+
+  return message.length <= 4096 ? message : `${message.slice(0, 4093)}...`;
 }
 
 function formatSalahMessage(prayerName) {
-  return [
-    "🌿 <b>Qur'an Tafseer Course - Salah Reminder</b>",
-    `🕌 It is time for <b>${escapeHtml(prayerName)}</b> (Delhi)`
+  const separator = "━━━━━━━━━━━━━━━━━━";
+  const safePrayer = escapeHtml(prayerName || "Prayer");
+  const message = [
+    "🌿 <b>Tafseer Bot</b>",
+    separator,
+    "🕌 <b>Salah Reminder</b>",
+    separator,
+    `🕌 <b>Now:</b> ${safePrayer} (Delhi)`,
+    "⏳ <b>Please prepare for salah.</b>"
   ].join("\n");
+
+  return message.length <= 4096 ? message : `${message.slice(0, 4093)}...`;
 }
 
 function formatClassReminderMessage() {
-  return [
-    "🌿 <b>Qur'an Tafseer Course - Class Reminder</b>",
-    "",
-    "📚 Reminder: Weekend class starts at 10:00 PM (Asia/Kolkata).",
-    "Please join on time."
+  const separator = "━━━━━━━━━━━━━━━━━━";
+  const message = [
+    "🌿 <b>Tafseer Bot</b>",
+    separator,
+    "🎓 <b>Weekend Class Reminder</b>",
+    separator,
+    "🕘 <b>Time:</b> 10:00 PM (Asia/Kolkata)",
+    "📚 <b>Note:</b> Please join a few minutes early."
   ].join("\n");
+
+  return message.length <= 4096 ? message : `${message.slice(0, 4093)}...`;
 }
 
 module.exports = {

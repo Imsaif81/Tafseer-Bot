@@ -56,45 +56,68 @@ async function sendHtml(chatId, html, options = {}) {
 
 function formatReminderStatus(status) {
   return [
-    `• Duas: <b>${status.duas ? "ON" : "OFF"}</b>`,
-    `• Hadith: <b>${status.hadith ? "ON" : "OFF"}</b>`,
-    `• Salah: <b>${status.salah ? "ON" : "OFF"}</b>`
+    `🔔 <b>Duas:</b> ${status.duas ? "✅ ON" : "❌ OFF"}`,
+    `📜 <b>Hadith:</b> ${status.hadith ? "✅ ON" : "❌ OFF"}`,
+    `🕌 <b>Salah:</b> ${status.salah ? "✅ ON" : "❌ OFF"}`
   ].join("\n");
 }
 
 function buildHelpText() {
-  return [
-    "📚 <b>Tafseer Bot Commands</b>",
+  const separator = "━━━━━━━━━━━━━━━━━━";
+  const message = [
+    "🌿 <b>Tafseer Bot</b>",
+    separator,
     "",
-    "/start - Welcome message",
-    "/help - Show command list",
-    "/info - Features and reminder status",
-    "/dua - Search duas by keyword",
-    "/duas on | /duas off - Toggle scheduled dua reminders",
-    "/hadith on | /hadith off - Toggle scheduled hadith reminders",
-    "/salah on | /salah off - Toggle salah reminders"
+    "📘 <b>Help & Commands</b>",
+    "",
+    "🚀 <b>Basics</b>",
+    "• <code>/start</code> Welcome message",
+    "• <code>/help</code> Command guide",
+    "• <code>/info</code> Features and status",
+    separator,
+    "",
+    "🔎 <b>Dua Search</b>",
+    "• <code>/dua</code> Search duas by keyword",
+    separator,
+    "",
+    "⏰ <b>Reminder Controls</b>",
+    "• <code>/duas on</code> | <code>/duas off</code>",
+    "• <code>/hadith on</code> | <code>/hadith off</code>",
+    "• <code>/salah on</code> | <code>/salah off</code>",
+    separator,
+    "",
+    "👨‍💻 <b>Developer:</b> Md Saif"
   ].join("\n");
+
+  return message.length <= 4096 ? message : `${message.slice(0, 4093)}...`;
 }
 
 function buildInfoText(chatId) {
   const status = scheduler.getReminderStatus(chatId);
 
-  return [
+  const separator = "━━━━━━━━━━━━━━━━━━";
+  const message = [
     "🌿 <b>Tafseer Bot</b>",
+    separator,
     "",
-    "Features:",
-    "• Daily Morning, Evening, and Sleep dua reminders",
-    "• Nightly Sahih hadith reminders with theme rotation",
-    "• Daily salah timing reminders (Delhi, Aladhan API)",
-    "• Weekend class reminder (Sat/Sun 9:30 PM for 10:00 PM class)",
-    "• Dua fuzzy search (50% overlap rule)",
-    "• Google Drive folder change monitoring (new/update/delete)",
+    "✨ <b>Features</b>",
     "",
-    "Reminder Status:",
+    "🌅 Morning / Evening / Sleep Duas",
+    "📜 Nightly Sahih Hadith",
+    "🕌 Delhi Salah Timings",
+    "🎓 Weekend Class Reminder",
+    "🔎 Fuzzy Dua Search",
+    "📁 Drive Monitoring",
+    separator,
+    "",
+    "📊 <b>Status</b>",
+    "",
     formatReminderStatus(status),
     "",
-    "Developer: <b>Md Saif</b>"
+    "👨‍💻 <b>Developer:</b> Md Saif"
   ].join("\n");
+
+  return message.length <= 4096 ? message : `${message.slice(0, 4093)}...`;
 }
 
 async function setBotCommands() {

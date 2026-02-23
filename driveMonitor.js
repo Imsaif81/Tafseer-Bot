@@ -74,7 +74,7 @@ class DriveMonitor {
   }
 
   async checkForChanges() {
-    const currentSnapshot = await this.buildSnapshot(this.folderId);
+    const { snapshot: currentSnapshot, trashedIds } = await this.buildSnapshot(this.folderId);
     if (!this.initialized) {
       this.snapshot = currentSnapshot;
       this.initialized = true;
@@ -82,7 +82,7 @@ class DriveMonitor {
       return;
     }
 
-    const events = this.diffSnapshots(this.snapshot, currentSnapshot);
+    const events = this.diffSnapshots(this.snapshot, currentSnapshot, trashedIds);
     this.snapshot = currentSnapshot;
     if (events.length === 0) {
       return;
@@ -114,6 +114,7 @@ class DriveMonitor {
   async buildSnapshot(rootFolderId) {
     const drive = await getDriveClient();
     const snapshot = new Map();
+    const trashedIds = new Set();
     const queue = [rootFolderId];
     const visited = new Set();
 
@@ -124,50 +125,68 @@ class DriveMonitor {
       }
       visited.add(folderId);
 
-      let pageToken = null;
-      do {
-        const response = await drive.files.list({
-          q: `'${folderId}' in parents and trashed = false`,
-          fields:
-            "nextPageToken, files(id,name,mimeType,modifiedTime,createdTime,webViewLink,owners(displayName),lastModifyingUser(displayName))",
-          pageSize: 1000,
-          pageToken: pageToken || undefined,
-          includeItemsFromAllDrives: true,
-          supportsAllDrives: true
-        });
-
-        const files = response.data.files || [];
-        for (const file of files) {
-          if (file.mimeType === FOLDER_MIME_TYPE) {
-            queue.push(file.id);
-            continue;
-          }
-
-          snapshot.set(file.id, {
-            id: file.id,
-            name: file.name || "Unnamed File",
-            modifiedTime: file.modifiedTime || "",
-            createdTime: file.createdTime || "",
-            webViewLink: file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`,
-            ownerName: file.owners?.[0]?.displayName || "Unknown",
-            lastEditorName:
-              file.lastModifyingUser?.displayName ||
-              file.owners?.[0]?.displayName ||
-              "Unknown"
-          });
+      const activeFiles = await this.listFilesByTrashState(drive, folderId, false);
+      for (const file of activeFiles) {
+        if (file.mimeType === FOLDER_MIME_TYPE) {
+          queue.push(file.id);
+          continue;
         }
 
-        pageToken = response.data.nextPageToken || null;
-      } while (pageToken);
+        snapshot.set(file.id, {
+          id: file.id,
+          name: file.name || "Unnamed File",
+          modifiedTime: file.modifiedTime || "",
+          createdTime: file.createdTime || "",
+          webViewLink: file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`,
+          ownerName: file.owners?.[0]?.displayName || "Unknown",
+          lastEditorName:
+            file.lastModifyingUser?.displayName ||
+            file.owners?.[0]?.displayName ||
+            "Unknown"
+        });
+      }
+
+      const trashedFiles = await this.listFilesByTrashState(drive, folderId, true);
+      for (const file of trashedFiles) {
+        if (file?.id) {
+          trashedIds.add(file.id);
+        }
+      }
     }
 
-    return snapshot;
+    return { snapshot, trashedIds };
   }
 
-  diffSnapshots(previousSnapshot, currentSnapshot) {
+  async listFilesByTrashState(drive, folderId, trashed) {
+    const files = [];
+    let pageToken = null;
+
+    do {
+      const response = await drive.files.list({
+        q: `'${folderId}' in parents and trashed=${trashed ? "true" : "false"}`,
+        fields:
+          "nextPageToken, files(id,name,mimeType,modifiedTime,createdTime,webViewLink,owners(displayName),lastModifyingUser(displayName))",
+        pageSize: 1000,
+        pageToken: pageToken || undefined,
+        includeItemsFromAllDrives: true,
+        supportsAllDrives: true
+      });
+
+      files.push(...(response.data.files || []));
+      pageToken = response.data.nextPageToken || null;
+    } while (pageToken);
+
+    return files;
+  }
+
+  diffSnapshots(previousSnapshot, currentSnapshot, trashedIds = new Set()) {
     const events = [];
 
     for (const [id, currentFile] of currentSnapshot.entries()) {
+      if (trashedIds.has(id)) {
+        continue;
+      }
+
       const previousFile = previousSnapshot.get(id);
       if (!previousFile) {
         events.push({ type: "new", file: currentFile });
@@ -180,7 +199,9 @@ class DriveMonitor {
     }
 
     for (const [id, previousFile] of previousSnapshot.entries()) {
-      if (!currentSnapshot.has(id)) {
+      const missingFromCurrent = !currentSnapshot.has(id);
+      const movedToTrash = trashedIds.has(id);
+      if (missingFromCurrent || movedToTrash) {
         events.push({ type: "deleted", file: previousFile });
       }
     }
@@ -223,59 +244,69 @@ class DriveMonitor {
 
   formatUpdatedFileMessage(file) {
     const { date, time } = formatDateTimeInTimeZone(file.modifiedTime || new Date(), this.timezone);
+    const separator = "━━━━━━━━━━━━━━━━━━";
+    const fileName = escapeHtml(String(file.name || "Unnamed File").slice(0, 220));
+    const editor = escapeHtml(String(file.lastEditorName || "Unknown").slice(0, 120));
+    const fileUrl = escapeHtml(
+      String(file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`).slice(0, 1000)
+    );
 
-    return [
-      "🌿 <b>Qur'an Tafseer Course - Official Update</b>",
-      "",
-      `📖 ${escapeHtml(file.name)} document has been updated.`,
-      "",
-      `🗓 Updated on: ${escapeHtml(date)}`,
-      `⏰ Time: ${escapeHtml(time)}`,
-      `👤 Updated by: ${escapeHtml(file.lastEditorName || "Unknown")}`,
-      "",
-      "🔗 Access here:",
-      escapeHtml(file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`),
-      "",
-      "Please review the updated content."
+    const message = [
+      "📁 <b>Drive Update</b>",
+      separator,
+      `📄 <b>${fileName}</b>`,
+      `✏ <b>Updated by:</b> ${editor}`,
+      `🕒 <b>${escapeHtml(time)}</b> | <b>${escapeHtml(date)}</b>`,
+      separator,
+      "🔗 <b>Link</b>",
+      fileUrl,
+      separator
     ].join("\n");
+
+    return message.length <= 4096 ? message : `${message.slice(0, 4093)}...`;
   }
 
   formatNewFileMessage(file) {
     const { date, time } = formatDateTimeInTimeZone(file.createdTime || new Date(), this.timezone);
+    const separator = "━━━━━━━━━━━━━━━━━━";
+    const fileName = escapeHtml(String(file.name || "Unnamed File").slice(0, 220));
+    const owner = escapeHtml(String(file.ownerName || "Unknown").slice(0, 120));
+    const fileUrl = escapeHtml(
+      String(file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`).slice(0, 1000)
+    );
 
-    return [
-      "🌿 <b>Qur'an Tafseer Course - Official Update</b>",
-      "",
-      "🆕 New document created.",
-      "",
-      `📖 ${escapeHtml(file.name)}`,
-      "",
-      `🗓 Created on: ${escapeHtml(date)}`,
-      `⏰ Time: ${escapeHtml(time)}`,
-      `👤 Created by: ${escapeHtml(file.ownerName || "Unknown")}`,
-      "",
-      "🔗 Access here:",
-      escapeHtml(file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`),
-      "",
-      "Please review the new document."
+    const message = [
+      "📁 <b>Drive Update</b>",
+      separator,
+      "🆕 <b>New File Added</b>",
+      `📄 <b>${fileName}</b>`,
+      `👤 <b>Owner:</b> ${owner}`,
+      `🕒 <b>${escapeHtml(time)}</b> | <b>${escapeHtml(date)}</b>`,
+      separator,
+      "🔗 <b>Link</b>",
+      fileUrl,
+      separator
     ].join("\n");
+
+    return message.length <= 4096 ? message : `${message.slice(0, 4093)}...`;
   }
 
   formatDeletedFileMessage(file) {
     const { date, time } = formatDateTimeInTimeZone(new Date(), this.timezone);
+    const separator = "━━━━━━━━━━━━━━━━━━";
+    const fileName = escapeHtml(String(file.name || "Unnamed File").slice(0, 220));
 
-    return [
-      "🌿 <b>Qur'an Tafseer Course - Official Update</b>",
-      "",
-      "❌ Document deleted.",
-      "",
-      `📖 ${escapeHtml(file.name)}`,
-      "",
-      `🗓 Deleted on: ${escapeHtml(date)}`,
-      `⏰ Time: ${escapeHtml(time)}`,
-      "",
-      "Please contact admin if this was unintentional."
+    const message = [
+      "📁 <b>Drive Update</b>",
+      separator,
+      "🗑 <b>File Removed</b>",
+      `📄 <b>${fileName}</b>`,
+      `🕒 <b>${escapeHtml(time)}</b> | <b>${escapeHtml(date)}</b>`,
+      separator,
+      "ℹ️ Please contact admin if this was unintentional."
     ].join("\n");
+
+    return message.length <= 4096 ? message : `${message.slice(0, 4093)}...`;
   }
 }
 
