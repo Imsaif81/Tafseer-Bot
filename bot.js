@@ -272,27 +272,32 @@ bot.on("message", async (msg) => {
 
       const topOptions = matches.slice(0, 3);
       setDuaSelectionState(chatId, senderId, topOptions);
+      const numberEmojis = ["1️⃣", "2️⃣", "3️⃣"];
       const items = topOptions.map((dua, index) => {
-        const previewText = String(dua.english || dua.arabic || "No text")
+        const previewSource = dua.arabic || dua.english || "No text";
+        const rawPreview = String(previewSource)
           .replace(/\s+/g, " ")
-          .trim()
-          .slice(0, 80);
-        return `${index + 1}. [${escapeHtml(dua.category || "General")}] ${escapeHtml(previewText)}`;
+          .trim();
+        const previewText = rawPreview.length > 90 ? `${rawPreview.slice(0, 89)}…` : rawPreview || "No text";
+
+        return `${numberEmojis[index]} <b>[${escapeHtml(dua.category || "General")}]</b>\n${escapeHtml(previewText)}`;
       });
 
-      const notice = matches.length > 3 ? "\n\nShowing top 3 matches." : "";
-      await sendHtml(
-        chatId,
-        [
-          "Multiple matches found. Reply with a number:",
-          ...items,
-          notice,
-          "",
-          "Send 1, 2, or 3."
-        ]
-          .filter(Boolean)
-          .join("\n")
-      );
+      const message = [
+        "🌿 <b>Dua Results</b>",
+        "━━━━━━━━━━━━━━━━━━",
+        "",
+        "🔎 <b>Multiple matches found</b>",
+        "",
+        ...items,
+        "",
+        "━━━━━━━━━━━━━━━━━━",
+        "✍️ Reply with <b>1, 2, or 3</b> to view full dua",
+        "",
+        "❌ Send /cancel to exit"
+      ].join("\n");
+
+      await sendHtml(chatId, message.length <= 4096 ? message : `${message.slice(0, 4093)}...`);
       return;
     } catch (error) {
       logError("Dua search query handling failed", error);
