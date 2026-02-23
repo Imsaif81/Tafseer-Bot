@@ -104,3 +104,4 @@ npm start
 - Salah timings fetch: daily `00:05`
 - Salah reminder check: every minute
 - Drive monitor check: every minute
+# Tafseer-Bot
