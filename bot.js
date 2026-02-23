@@ -167,7 +167,24 @@ bot.onText(/^\/dua(?:@\w+)?$/i, async (msg) => {
 
   await sendHtml(
     msg.chat.id,
-    "🔎 Dua search mode enabled.\nSend keywords (English/Urdu/Arabic) to find matching duas."
+    [
+      "🌿 <b>Dua Search Mode</b>",
+      "━━━━━━━━━━━━━━━━━━",
+      "",
+      "🔎 <b>Type any keyword to search.</b>",
+      "",
+      "Examples:",
+      "• sone ki dua",
+      "• safar",
+      "• morning",
+      "• anxiety",
+      "• رزق",
+      "",
+      "You can use:",
+      "English | Urdu | Arabic",
+      "",
+      "❌ Send /cancel to exit"
+    ].join("\n")
   );
 });
 

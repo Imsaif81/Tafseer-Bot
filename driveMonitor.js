@@ -247,20 +247,17 @@ class DriveMonitor {
     const separator = "━━━━━━━━━━━━━━━━━━";
     const fileName = escapeHtml(String(file.name || "Unnamed File").slice(0, 220));
     const editor = escapeHtml(String(file.lastEditorName || "Unknown").slice(0, 120));
-    const fileUrl = escapeHtml(
-      String(file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`).slice(0, 1000)
-    );
+    const link = escapeHtml(String(file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`));
+    const formattedDateTime = escapeHtml(`${date} ${time}`);
 
     const message = [
-      "📁 <b>Drive Update</b>",
+      "📁 <b>Drive Activity</b>",
       separator,
+      "✏️ <b>Document Updated</b>",
       `📄 <b>${fileName}</b>`,
-      `✏ <b>Updated by:</b> ${editor}`,
-      `🕒 <b>${escapeHtml(time)}</b> | <b>${escapeHtml(date)}</b>`,
-      separator,
-      "🔗 <b>Link</b>",
-      fileUrl,
-      separator
+      `👤 Updated by: ${editor}`,
+      `🕒 ${formattedDateTime}`,
+      `🔗 <a href="${link}">View Document</a>`
     ].join("\n");
 
     return message.length <= 4096 ? message : `${message.slice(0, 4093)}...`;
@@ -271,21 +268,17 @@ class DriveMonitor {
     const separator = "━━━━━━━━━━━━━━━━━━";
     const fileName = escapeHtml(String(file.name || "Unnamed File").slice(0, 220));
     const owner = escapeHtml(String(file.ownerName || "Unknown").slice(0, 120));
-    const fileUrl = escapeHtml(
-      String(file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`).slice(0, 1000)
-    );
+    const link = escapeHtml(String(file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`));
+    const formattedDateTime = escapeHtml(`${date} ${time}`);
 
     const message = [
-      "📁 <b>Drive Update</b>",
+      "📁 <b>Drive Activity</b>",
       separator,
-      "🆕 <b>New File Added</b>",
+      "🆕 <b>New File Created</b>",
       `📄 <b>${fileName}</b>`,
-      `👤 <b>Owner:</b> ${owner}`,
-      `🕒 <b>${escapeHtml(time)}</b> | <b>${escapeHtml(date)}</b>`,
-      separator,
-      "🔗 <b>Link</b>",
-      fileUrl,
-      separator
+      `👤 Owner: ${owner}`,
+      `🕒 ${formattedDateTime}`,
+      `🔗 <a href="${link}">Open Document</a>`
     ].join("\n");
 
     return message.length <= 4096 ? message : `${message.slice(0, 4093)}...`;
@@ -295,15 +288,17 @@ class DriveMonitor {
     const { date, time } = formatDateTimeInTimeZone(new Date(), this.timezone);
     const separator = "━━━━━━━━━━━━━━━━━━";
     const fileName = escapeHtml(String(file.name || "Unnamed File").slice(0, 220));
+    const editor = escapeHtml(String(file.lastEditorName || "Unknown").slice(0, 120));
+    const formattedDateTime = escapeHtml(`${date} ${time}`);
 
     const message = [
-      "📁 <b>Drive Update</b>",
+      "📁 <b>Drive Activity</b>",
       separator,
-      "🗑 <b>File Removed</b>",
+      "❌ <b>File Deleted</b>",
       `📄 <b>${fileName}</b>`,
-      `🕒 <b>${escapeHtml(time)}</b> | <b>${escapeHtml(date)}</b>`,
-      separator,
-      "ℹ️ Please contact admin if this was unintentional."
+      `👤 Last edited by: ${editor}`,
+      `🕒 ${formattedDateTime}`,
+      "⚠️ This file was removed from the monitored folder."
     ].join("\n");
 
     return message.length <= 4096 ? message : `${message.slice(0, 4093)}...`;
