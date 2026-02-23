@@ -4,7 +4,6 @@ const { getGoogleAuth } = require("./googleAuth");
 const {
   DEFAULT_TIMEZONE,
   formatDateTimeInTimeZone,
-  escapeHtml,
   logError,
   logInfo
 } = require("./utils");
@@ -12,8 +11,120 @@ const {
 const FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
 const DEFAULT_FOLDER_ID = "16O4S87mKVkg4PbC4GE4CpCFjQrV6ggd3";
 const COOLDOWN_MS = 3 * 60 * 1000;
+const DRIVE_EVENT_TYPES = Object.freeze({
+  FILE_CREATED: 1,
+  FILE_UPDATED: 2,
+  FILE_DELETED: 3,
+  FOLDER_CREATED: 4,
+  FOLDER_DELETED: 5
+});
 
 let driveClientPromise;
+
+function escapeMarkdown(value) {
+  return String(value ?? "")
+    .replace(/\\/g, "\\\\")
+    .replace(/([_*`\[])/g, "\\$1");
+}
+
+function normalizeDriveText(value, { fallback = "Unknown", max = 220 } = {}) {
+  const compact = String(value ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const safe = compact ? compact.slice(0, max) : fallback;
+  return escapeMarkdown(safe);
+}
+
+function normalizeDriveLink(value) {
+  return String(value ?? "").trim();
+}
+
+function generateDriveEventMessage(eventType, data = {}) {
+  const fileName = normalizeDriveText(data.fileName, { fallback: "Unnamed File", max: 220 });
+  const folderName = normalizeDriveText(data.folderName, { fallback: "Unnamed Folder", max: 220 });
+  const date = normalizeDriveText(data.date, { fallback: "N/A", max: 50 });
+  const time = normalizeDriveText(data.time, { fallback: "N/A", max: 50 });
+  const editorName = normalizeDriveText(data.editorName, { fallback: "Unknown", max: 120 });
+  const fileLink = normalizeDriveLink(data.fileLink);
+
+  if (eventType === DRIVE_EVENT_TYPES.FILE_CREATED) {
+    return [
+      "*🌿 Qur’an Tafseer Course – New File Added*",
+      "",
+      `📄 ${fileName} has been created.`,
+      "",
+      `🗓 *Created on:* ${date}`,
+      `⏰ *Time:* ${time}`,
+      `👤 *Created by:* ${editorName}`,
+      "",
+      "🔗 *Access here:*",
+      fileLink,
+      "",
+      "Please review the newly added file."
+    ].join("\n");
+  }
+
+  if (eventType === DRIVE_EVENT_TYPES.FILE_UPDATED) {
+    return [
+      "*🌿 Qur’an Tafseer Course – Official Update*",
+      "",
+      `📖 ${fileName} has been updated.`,
+      "",
+      `🗓 *Updated on:* ${date}`,
+      `⏰ *Time:* ${time}`,
+      `👤 *Updated by:* ${editorName}`,
+      "",
+      "🔗 *Access here:*",
+      fileLink,
+      "",
+      "Please review the updated content."
+    ].join("\n");
+  }
+
+  if (eventType === DRIVE_EVENT_TYPES.FILE_DELETED) {
+    return [
+      "*🌿 Qur’an Tafseer Course – File Removed*",
+      "",
+      `❌ ${fileName} has been deleted.`,
+      "",
+      `🗓 *Deleted on:* ${date}`,
+      `⏰ *Time:* ${time}`,
+      `👤 *Deleted by:* ${editorName}`,
+      "",
+      "This file is no longer available in the course folder."
+    ].join("\n");
+  }
+
+  if (eventType === DRIVE_EVENT_TYPES.FOLDER_CREATED) {
+    return [
+      "*🌿 Qur’an Tafseer Course – New Folder Created*",
+      "",
+      `📁 ${folderName} folder has been created.`,
+      "",
+      `🗓 *Created on:* ${date}`,
+      `⏰ *Time:* ${time}`,
+      `👤 *Created by:* ${editorName}`,
+      "",
+      "This folder is now available in the course directory."
+    ].join("\n");
+  }
+
+  if (eventType === DRIVE_EVENT_TYPES.FOLDER_DELETED) {
+    return [
+      "*🌿 Qur’an Tafseer Course – Folder Removed*",
+      "",
+      `❌ ${folderName} folder has been deleted.`,
+      "",
+      `🗓 *Deleted on:* ${date}`,
+      `⏰ *Time:* ${time}`,
+      `👤 *Deleted by:* ${editorName}`,
+      "",
+      "This folder is no longer available in the course directory."
+    ].join("\n");
+  }
+
+  throw new Error(`Unsupported drive event type: ${eventType}`);
+}
 
 async function getDriveClient() {
   if (!driveClientPromise) {
@@ -103,7 +214,7 @@ class DriveMonitor {
       await Promise.allSettled(
         chatIds.map((chatId) =>
           this.bot.sendMessage(chatId, message, {
-            parse_mode: "HTML",
+            parse_mode: "Markdown",
             disable_web_page_preview: false
           })
         )
@@ -244,63 +355,36 @@ class DriveMonitor {
 
   formatUpdatedFileMessage(file) {
     const { date, time } = formatDateTimeInTimeZone(file.modifiedTime || new Date(), this.timezone);
-    const separator = "━━━━━━━━━━━━━━━━━━";
-    const fileName = escapeHtml(String(file.name || "Unnamed File").slice(0, 220));
-    const editor = escapeHtml(String(file.lastEditorName || "Unknown").slice(0, 120));
-    const link = escapeHtml(String(file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`));
-    const formattedDateTime = escapeHtml(`${date} ${time}`);
-
-    const message = [
-      "📁 <b>Drive Activity</b>",
-      separator,
-      "✏️ <b>Document Updated</b>",
-      `📄 <b>${fileName}</b>`,
-      `👤 Updated by: ${editor}`,
-      `🕒 ${formattedDateTime}`,
-      `🔗 <a href="${link}">View Document</a>`
-    ].join("\n");
-
+    const message = generateDriveEventMessage(DRIVE_EVENT_TYPES.FILE_UPDATED, {
+      fileName: file.name,
+      date,
+      time,
+      editorName: file.lastEditorName || "Unknown",
+      fileLink: file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`
+    });
     return message.length <= 4096 ? message : `${message.slice(0, 4093)}...`;
   }
 
   formatNewFileMessage(file) {
     const { date, time } = formatDateTimeInTimeZone(file.createdTime || new Date(), this.timezone);
-    const separator = "━━━━━━━━━━━━━━━━━━";
-    const fileName = escapeHtml(String(file.name || "Unnamed File").slice(0, 220));
-    const owner = escapeHtml(String(file.ownerName || "Unknown").slice(0, 120));
-    const link = escapeHtml(String(file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`));
-    const formattedDateTime = escapeHtml(`${date} ${time}`);
-
-    const message = [
-      "📁 <b>Drive Activity</b>",
-      separator,
-      "🆕 <b>New File Created</b>",
-      `📄 <b>${fileName}</b>`,
-      `👤 Owner: ${owner}`,
-      `🕒 ${formattedDateTime}`,
-      `🔗 <a href="${link}">Open Document</a>`
-    ].join("\n");
-
+    const message = generateDriveEventMessage(DRIVE_EVENT_TYPES.FILE_CREATED, {
+      fileName: file.name,
+      date,
+      time,
+      editorName: file.ownerName || "Unknown",
+      fileLink: file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`
+    });
     return message.length <= 4096 ? message : `${message.slice(0, 4093)}...`;
   }
 
   formatDeletedFileMessage(file) {
     const { date, time } = formatDateTimeInTimeZone(new Date(), this.timezone);
-    const separator = "━━━━━━━━━━━━━━━━━━";
-    const fileName = escapeHtml(String(file.name || "Unnamed File").slice(0, 220));
-    const editor = escapeHtml(String(file.lastEditorName || "Unknown").slice(0, 120));
-    const formattedDateTime = escapeHtml(`${date} ${time}`);
-
-    const message = [
-      "📁 <b>Drive Activity</b>",
-      separator,
-      "❌ <b>File Deleted</b>",
-      `📄 <b>${fileName}</b>`,
-      `👤 Last edited by: ${editor}`,
-      `🕒 ${formattedDateTime}`,
-      "⚠️ This file was removed from the monitored folder."
-    ].join("\n");
-
+    const message = generateDriveEventMessage(DRIVE_EVENT_TYPES.FILE_DELETED, {
+      fileName: file.name,
+      date,
+      time,
+      editorName: file.lastEditorName || "Unknown"
+    });
     return message.length <= 4096 ? message : `${message.slice(0, 4093)}...`;
   }
 }
@@ -310,5 +394,7 @@ function createDriveMonitor(config) {
 }
 
 module.exports = {
-  createDriveMonitor
+  DRIVE_EVENT_TYPES,
+  createDriveMonitor,
+  generateDriveEventMessage
 };

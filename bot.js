@@ -2,15 +2,15 @@ require("dotenv").config();
 
 const TelegramBot = require("node-telegram-bot-api");
 const { createScheduler } = require("./scheduler");
-const { getAllDuas } = require("./sheets");
 const {
   beginDuaSearch,
   setDuaSelectionState,
   getDuaSearchState,
   clearDuaSearchState,
-  rankDuaMatches
+  searchDuaMaster,
+  buildDuaResultsMessage
 } = require("./search");
-const { escapeHtml, formatDuaMessage, logError, logInfo } = require("./utils");
+const { formatDuaMessage, getLogLevel, logDebug, logError, logInfo } = require("./utils");
 
 const REQUIRED_ENV_KEYS = ["BOT_TOKEN", "SPREADSHEET_ID", "GOOGLE_CREDENTIALS_JSON"];
 for (const key of REQUIRED_ENV_KEYS) {
@@ -30,6 +30,45 @@ const bot = new TelegramBot(process.env.BOT_TOKEN, {
 
 const scheduler = createScheduler(bot);
 scheduler.start();
+
+const POLLING_CONFLICT_COOLDOWN_MS = 3 * 60 * 1000;
+let lastPollingConflictLogAt = 0;
+let suppressedPollingConflictCount = 0;
+
+function isPollingConflictError(error) {
+  const statusCode = Number(error?.response?.statusCode || error?.response?.body?.error_code);
+  if (statusCode === 409) {
+    return true;
+  }
+
+  const message = String(error?.message || "");
+  return /\b409\b/.test(message) && /conflict|getupdates/i.test(message);
+}
+
+function handlePollingConflict(error) {
+  suppressedPollingConflictCount += 1;
+  const now = Date.now();
+  const canLogImportant = now - lastPollingConflictLogAt >= POLLING_CONFLICT_COOLDOWN_MS;
+
+  if (!canLogImportant) {
+    logDebug("Suppressed duplicate polling conflict error", error?.message || error);
+    return;
+  }
+
+  const duplicateCount = Math.max(0, suppressedPollingConflictCount - 1);
+  suppressedPollingConflictCount = 0;
+  lastPollingConflictLogAt = now;
+
+  if (duplicateCount > 0) {
+    logInfo(
+      `Polling conflict (409) detected. Ensure a single bot instance is running. Suppressed ${duplicateCount} duplicates in the last 3 minutes.`
+    );
+  } else {
+    logInfo("Polling conflict (409) detected. Ensure a single bot instance is running.");
+  }
+
+  logDebug("Polling conflict error details", error);
+}
 
 function getSenderId(msg) {
   return msg?.from?.id || msg?.chat?.id;
@@ -52,6 +91,20 @@ async function sendHtml(chatId, html, options = {}) {
   } catch (error) {
     logError(`Failed to send message to chat ${chatId}`, error);
   }
+}
+
+function toDuaDisplayModel(dua) {
+  const source = dua.source || dua.source_ref || dua.reference || "N/A";
+  const authenticity =
+    dua.authenticity ||
+    dua.reference ||
+    (dua.hisnul_number ? `Hisnul Muslim #${dua.hisnul_number}` : "Hisnul Muslim");
+
+  return {
+    ...dua,
+    source,
+    authenticity
+  };
 }
 
 function formatReminderStatus(status) {
@@ -107,7 +160,7 @@ function buildInfoText(chatId) {
     "🕌 Delhi Salah Timings",
     "🎓 Weekend Class Reminder",
     "🔎 Fuzzy Dua Search",
-    "📁 Drive Monitoring",
+    "📂 Google Docs & Files Updates",
     separator,
     "",
     "📊 <b>Status</b>",
@@ -256,8 +309,7 @@ bot.on("message", async (msg) => {
 
   if (state.stage === "awaiting_query") {
     try {
-      const duas = await getAllDuas();
-      const matches = rankDuaMatches(duas, text);
+      const matches = await searchDuaMaster(text, { limit: 3 });
 
       if (matches.length === 0) {
         await sendHtml(chatId, "No matching dua found. Try different keywords.");
@@ -266,38 +318,13 @@ bot.on("message", async (msg) => {
 
       if (matches.length === 1) {
         clearDuaSearchState(chatId, senderId);
-        await sendHtml(chatId, formatDuaMessage(matches[0]));
+        await sendHtml(chatId, formatDuaMessage(toDuaDisplayModel(matches[0])));
         return;
       }
 
       const topOptions = matches.slice(0, 3);
       setDuaSelectionState(chatId, senderId, topOptions);
-      const numberEmojis = ["1️⃣", "2️⃣", "3️⃣"];
-      const items = topOptions.map((dua, index) => {
-        const previewSource = dua.arabic || dua.english || "No text";
-        const rawPreview = String(previewSource)
-          .replace(/\s+/g, " ")
-          .trim();
-        const previewText = rawPreview.length > 90 ? `${rawPreview.slice(0, 89)}…` : rawPreview || "No text";
-
-        return `${numberEmojis[index]} <b>[${escapeHtml(dua.category || "General")}]</b>\n${escapeHtml(previewText)}`;
-      });
-
-      const message = [
-        "🌿 <b>Dua Results</b>",
-        "━━━━━━━━━━━━━━━━━━",
-        "",
-        "🔎 <b>Multiple matches found</b>",
-        "",
-        ...items,
-        "",
-        "━━━━━━━━━━━━━━━━━━",
-        "✍️ Reply with <b>1, 2, or 3</b> to view full dua",
-        "",
-        "❌ Send /cancel to exit"
-      ].join("\n");
-
-      await sendHtml(chatId, message.length <= 4096 ? message : `${message.slice(0, 4093)}...`);
+      await sendHtml(chatId, buildDuaResultsMessage(topOptions));
       return;
     } catch (error) {
       logError("Dua search query handling failed", error);
@@ -320,11 +347,15 @@ bot.on("message", async (msg) => {
     }
 
     clearDuaSearchState(chatId, senderId);
-    await sendHtml(chatId, formatDuaMessage(selected));
+    await sendHtml(chatId, formatDuaMessage(toDuaDisplayModel(selected)));
   }
 });
 
 bot.on("polling_error", (error) => {
+  if (isPollingConflictError(error)) {
+    handlePollingConflict(error);
+    return;
+  }
   logError("Polling error", error);
 });
 
@@ -357,4 +388,4 @@ process.on("SIGINT", () => handleShutdown("SIGINT"));
 process.on("SIGTERM", () => handleShutdown("SIGTERM"));
 
 setBotCommands();
-logInfo("Tafseer Bot started in polling mode.");
+logInfo(`Tafseer Bot started in polling mode. Log level: ${getLogLevel()}.`);

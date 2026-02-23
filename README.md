@@ -21,6 +21,8 @@ Developer: **Md Saif**
 ```txt
 tafseer-bot/
 ├── bot.js
+├── importMasterDuas.js
+├── keywordGenerator.js
 ├── scheduler.js
 ├── sheets.js
 ├── search.js
@@ -58,6 +60,23 @@ Spreadsheet must contain these sheets exactly:
 - H: Used
 - I: LastSent
 
+### 3) `DUA_MASTER` (auto-managed by importer)
+- A: `dua_id`
+- B: `chapter_id`
+- C: `chapter_title_en`
+- D: `category`
+- E: `arabic`
+- F: `transliteration`
+- G: `english`
+- H: `urdu`
+- I: `source_ref`
+- J: `keywords_en`
+- K: `keywords_ur`
+- L: `keywords_roman`
+- M: `keywords_ar`
+- N: `tags`
+- O: `search_blob`
+
 ## Environment Variables
 Environment Variables required in Railway:
 
@@ -65,7 +84,12 @@ Environment Variables required in Railway:
 BOT_TOKEN=your_telegram_bot_token
 SPREADSHEET_ID=your_google_sheet_id
 GOOGLE_CREDENTIALS_JSON=full JSON content of service account key
+LOG_LEVEL=important
 ```
+
+`LOG_LEVEL` supports:
+- `important` (default, clean production logs)
+- `debug` (verbose diagnostics)
 
 ## Google Credentials
 1. Create a Google Cloud service account.
@@ -81,8 +105,33 @@ GOOGLE_CREDENTIALS_JSON=full JSON content of service account key
 ```bash
 npm install
 npm run check
+npm run import:duas
 npm start
 ```
+
+## Dua Master Import
+Populate or refresh `DUA_MASTER` from HisnMuslim API:
+
+```bash
+npm run import:duas
+```
+
+Importer behavior:
+- creates `DUA_MASTER` sheet if missing
+- writes header row
+- upserts rows by `dua_id` (idempotent; no duplicate rows on re-run)
+- generates Level-3 keyword bundles (English/Urdu/Roman/Arabic), tags, and search blob
+
+## Test `/dua`
+1. Run bot after import:
+```bash
+npm start
+```
+2. In Telegram:
+- send `/dua`
+- send keywords like `safar`, `sleep`, `rizq`, `anxiety`, `morning`
+- verify top 3 results show category + Arabic snippet
+- reply `1`, `2`, or `3` to open full dua
 
 ## Railway Deployment
 1. Push this project to GitHub.

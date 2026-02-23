@@ -1,14 +1,59 @@
 const DEFAULT_TIMEZONE = "Asia/Kolkata";
+const LOG_LEVELS = {
+  important: 1,
+  debug: 2
+};
+
+const rawLogLevel = String(process.env.LOG_LEVEL || "important")
+  .trim()
+  .toLowerCase();
+const CURRENT_LOG_LEVEL = LOG_LEVELS[rawLogLevel] ? rawLogLevel : "important";
+
+function shouldLog(level) {
+  const normalizedLevel = LOG_LEVELS[level] ? level : "important";
+  return LOG_LEVELS[CURRENT_LOG_LEVEL] >= LOG_LEVELS[normalizedLevel];
+}
+
+function getLogLevel() {
+  return CURRENT_LOG_LEVEL;
+}
 
 function logInfo(message, meta) {
-  if (meta !== undefined) {
-    console.log(`[INFO] ${message}`, meta);
+  if (!shouldLog("important")) {
     return;
   }
+
+  if (meta !== undefined) {
+    if (shouldLog("debug")) {
+      console.log(`[INFO] ${message}`, meta);
+      return;
+    }
+
+    console.log(`[INFO] ${message}`);
+    return;
+  }
+
   console.log(`[INFO] ${message}`);
 }
 
+function logDebug(message, meta) {
+  if (!shouldLog("debug")) {
+    return;
+  }
+
+  if (meta !== undefined) {
+    console.log(`[DEBUG] ${message}`, meta);
+    return;
+  }
+
+  console.log(`[DEBUG] ${message}`);
+}
+
 function logError(message, error) {
+  if (!shouldLog("important")) {
+    return;
+  }
+
   if (!error) {
     console.error(`[ERROR] ${message}`);
     return;
@@ -16,13 +61,16 @@ function logError(message, error) {
 
   if (error instanceof Error) {
     console.error(`[ERROR] ${message}: ${error.message}`);
-    if (error.stack) {
+    if (error.stack && shouldLog("debug")) {
       console.error(error.stack);
     }
     return;
   }
 
-  console.error(`[ERROR] ${message}`, error);
+  console.error(`[ERROR] ${message}`);
+  if (shouldLog("debug")) {
+    console.error(error);
+  }
 }
 
 function escapeHtml(value) {
@@ -247,7 +295,9 @@ function formatClassReminderMessage() {
 
 module.exports = {
   DEFAULT_TIMEZONE,
+  getLogLevel,
   logInfo,
+  logDebug,
   logError,
   escapeHtml,
   normalizeText,

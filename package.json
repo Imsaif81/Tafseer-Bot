@@ -5,7 +5,8 @@
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js",
-    "check": "node --check bot.js && node --check googleAuth.js && node --check sheets.js && node --check scheduler.js && node --check search.js && node --check salah.js && node --check driveMonitor.js && node --check utils.js"
+    "check": "node --check bot.js && node --check googleAuth.js && node --check sheets.js && node --check scheduler.js && node --check search.js && node --check salah.js && node --check driveMonitor.js && node --check utils.js && node --check keywordGenerator.js && node --check importMasterDuas.js",
+    "import:duas": "node importMasterDuas.js"
   },
   "engines": {
     "node": ">=18.17.0"
